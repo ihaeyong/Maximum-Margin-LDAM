@@ -125,7 +125,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # create model
     print("=> creating model '{}'".format(args.arch))
     num_classes = 100 if args.dataset == 'cifar100' else 10
-    use_norm = True if args.loss_type == 'LDAM' else False
+    use_norm = True if args.loss_type in ['LDAM', 'Unbiased','Unbiased-ldam'] else False
     model = models.__dict__[args.arch](num_classes=num_classes, use_norm=use_norm)
 
     if args.gpu is not None:
@@ -209,17 +209,6 @@ def main_worker(gpu, ngpus_per_node, args):
             train_sampler = None
             per_cls_weights = None
 
-            if False:
-                idx = epoch // 60
-                scales = [1.0, 5.0, 10.0, 20.0, 30.0, 30.0, 30.0] # 74.5 for ldam
-                args.scale = scales[idx]
-            elif False: # scale_v2
-                idx = epoch // 160 # chainging point for learning rates
-                scales = [1.0, args.scale] #
-                args.scale = scales[idx]
-            else: # origin
-                None
-
         elif args.train_rule == 'Resample':
             train_sampler = ImbalancedDatasetSampler(train_dataset)
             per_cls_weights = None
@@ -246,6 +235,8 @@ def main_worker(gpu, ngpus_per_node, args):
             per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
             per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
             per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
+
+            args.beta = betas[idx]
         else:
             warnings.warn('Sample rule is not listed')
 
@@ -315,8 +306,9 @@ def obj_margins(rm_obj_dists, labels, index_float, max_m, gamma=10.0):
 
     batch_m = batch_ng + batch_fg
 
+    # 73.77 // wo : 74.06
     # max : 1.0, min : -inf
-    batch_m = batch_m * (0.5 / batch_m.max())
+    #batch_m = batch_m * (0.5 / batch_m.max())
 
     return batch_m.data
 
@@ -428,26 +420,19 @@ def train(train_loader, model, criterion, optimizer, epoch, args, log, tf_writer
         # compute output
         output = model(input)
         if args.loss_type == 'Unbiased':
-            #with torch.no_grad():
-            #    per_cls_weight, cls_num_list = weight(output.data, target, args)
-            #loss = F.cross_entropy(output, target.long(), per_cls_weight)
-            None
-
+            per_cls_weight, cls_num_list = weight(output.data, target, args)
+            loss = F.cross_entropy(output, target, per_cls_weight)
         elif args.loss_type == 'Unbiased-ldam':
-            #with torch.no_grad():
-            #    per_cls_weight, cls_num_list = weight(output.data, target, args)
+            per_cls_weight, cls_num_list = weight(output.data, target, args)
 
-            if True:
-                loss = criterion(output, target)
-            else:
-                loss = ldam_loss(output,
-                                 target,
-                                 args.cls_num_list,
-                                 per_cls_weight,
-                                 scale=args.scale,
-                                 max_m=args.max_m,
-                                 gamma=args.gamma,
-                                 margin=False)
+            loss = ldam_loss(output,
+                             target,
+                             args.cls_num_list,
+                             per_cls_weight,
+                             scale=args.scale,
+                             max_m=args.max_m,
+                             gamma=args.gamma,
+                             margin=False)
         else:
             loss = criterion(output, target)
 
@@ -476,6 +461,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, log, tf_writer
                 epoch, i, len(train_loader), batch_time=batch_time,
                 data_time=data_time, loss=losses, top1=top1, top5=top5, lr=optimizer.param_groups[-1]['lr'] * 0.1))  # TODO
             print(output)
+            print('per_cls_weight={}'.format(per_cls_weight))
             log.write(output + '\n')
             log.flush()
 
@@ -504,13 +490,11 @@ def validate(val_loader, model, criterion, epoch, args, log=None, tf_writer=None
             # compute output
             output = model(input)
             if args.loss_type == 'Unbiased' and False:
-                with torch.no_grad():
-                    per_cls_weight, cls_num_list = weight(output.data, target, args)
+                per_cls_weight, cls_num_list = weight(output.data, target, args)
                 loss = F.cross_entropy(output, target.long(), per_cls_weight)
 
             elif args.loss_type == 'Unbiased-ldam' and False:
-                with torch.no_grad():
-                    per_cls_weight, cls_num_list = weight(output.data, target, args)
+                per_cls_weight, cls_num_list = weight(output.data, target, args)
                 loss = ldam_loss(output,
                                  target,
                                  args.cls_num_list,
