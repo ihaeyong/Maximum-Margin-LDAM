@@ -35,13 +35,13 @@ elif [ $1 == 'unbiased-ldam' ]; then
            --gpu 0 --imb_type exp \
            --imb_factor 0.01 \
            --loss_type Unbiased-ldam \
-           --train_rule None \
-           --epochs 300 \
+           --train_rule Unbiased \
+           --epochs 200 \
            --skew_th 2.9 \
            --ent_sc 1.0 \
            --scale 30.0 \
            --max_m 0.02 \
-           --gamma 8.0 \
-           --exp_str unbiased-ldam-exp_margin_scale_v2
+           --gamma 2.0 \
+           --exp_str unbiased-ldam-origin
 
 fi
