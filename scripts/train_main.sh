@@ -36,11 +36,12 @@ elif [ $1 == 'unbiased-ldam' ]; then
            --imb_factor 0.01 \
            --loss_type Unbiased-ldam \
            --train_rule None \
-           --epochs 500 \
+           --epochs 300 \
            --skew_th 2.9 \
            --ent_sc 1.0 \
-           --scale 50.0 \
-           --max_m 0.5 \
-           --exp_str unbiased-ldam-epoch500-idx50_v1
+           --scale 30.0 \
+           --max_m 0.02 \
+           --gamma 8.0 \
+           --exp_str unbiased-ldam-exp_margin_scale_v2
 
 fi

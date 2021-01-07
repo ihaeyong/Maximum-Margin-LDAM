@@ -77,6 +77,8 @@ parser.add_argument('--skew_th', default=1.0, type=float, help='skew threshold')
 parser.add_argument('--ent_sc', default=1.0, type=float, help='entropy scaler')
 parser.add_argument('--scale', default=30.0, type=float, help='ldam logit scale')
 parser.add_argument('--max_m', default=0.5, type=float, help='ldam logit margin')
+parser.add_argument('--beta', default=0.0, type=float, help='beta')
+parser.add_argument('--gamma', default=10.0, type=float, help='beta')
 
 best_acc1 = 0
 
@@ -92,6 +94,7 @@ def main():
         args.store_name = '_'.join([args.store_name,'ent_sc',str(args.ent_sc)])
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
+        args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
 
     prepare_folders(args)
     if args.seed is not None:
@@ -206,15 +209,22 @@ def main_worker(gpu, ngpus_per_node, args):
             train_sampler = None
             per_cls_weights = None
 
-            #idx = epoch // 60
-            #scales = [1.0, 5.0, 10.0, 20.0, 30.0] # 74.5
-            #scales = [1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0]
-            
-            idx = epoch // 50
-            #scales = [1.0, 10.0, 20.0, 30.0, 40.0, 50.0]
-            scales = [1.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0] # v1
+            if False:
+                idx = epoch // 60
+                scales = [1.0, 5.0, 10.0, 20.0, 30.0, 30.0, 30.0] # 74.5 for ldam
+            elif False: # scale_v1
+                idx = epoch // 50
+                scales = [1.0, 5.0, 30.0, 30.0, 30.0, 30.0]
+            elif True: # scale_v2
+                idx = epoch // 160 # chainging point for learning rates
+                scales = [1.0, args.scale] #
+            else: # scale
+                idx = epoch // 160
+                scales = [1.0, 30.0] #
 
             args.scale = scales[idx]
+
+
         elif args.train_rule == 'Resample':
             train_sampler = ImbalancedDatasetSampler(train_dataset)
             per_cls_weights = None
@@ -241,6 +251,8 @@ def main_worker(gpu, ngpus_per_node, args):
             per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
             per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
             per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
+
+            args.beta = betas[idx]
         else:
             warnings.warn('Sample rule is not listed')
 
@@ -280,18 +292,55 @@ def main_worker(gpu, ngpus_per_node, args):
             'optimizer' : optimizer.state_dict(),
         }, is_best)
 
-def ldam_loss(x, target,cls_num_list,per_cls_weight,scale=30 ,max_m=0.5):
-    m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
-    m_list = m_list * (max_m / np.max(m_list))
-    m_list = torch.cuda.FloatTensor(m_list)
+
+def obj_margins(rm_obj_dists, labels, index_float, max_m, gamma=10.0):
+
+    obj_dists_ = F.softmax(rm_obj_dists, dim=1)
+    obj_neg_labels = 1.0 - index_float
+    obj_neg_dists = obj_dists_ * obj_neg_labels
+
+    min_pos_prob = obj_dists_[:, labels.data.cpu().numpy()[0]]
+    max_neg_prob = obj_neg_dists.max(1)[0]
+
+    # estimate the margin between dists and gt labels
+    batch_m = torch.max(
+        min_pos_prob - max_neg_prob,
+        torch.zeros_like(max_neg_prob))[:,None]
+
+    mask_fg = (batch_m > 0).float()
+    batch_fg = torch.exp(-batch_m-max_m * gamma) * mask_fg
+
+    batch_m = torch.max(
+        max_neg_prob - min_pos_prob,
+        torch.zeros_like(max_neg_prob))[:,None]
+
+    mask_ng = (batch_m > 0).float()
+    batch_ng = torch.exp(-batch_m-max_m) * mask_ng
+
+
+    batch_m = batch_ng + batch_fg
+
+    return batch_m.data
+
+def ldam_loss(x, target,cls_num_list,per_cls_weight,scale=30 ,max_m=0.5,
+              gamma=10.0, margin=False):
 
     index = torch.zeros_like(x, dtype=torch.uint8)
     index.scatter_(1, target.data.view(-1, 1), 1)
-
     index_float = index.type(torch.cuda.FloatTensor)
-    batch_m = torch.matmul(m_list[None, :], index_float.transpose(0,1))
-    batch_m = batch_m.view((-1, 1))
-    x_m = x - batch_m
+
+    if margin :
+        batch_m = obj_margins(x, target, index_float, max_m, gamma)
+        x_m = x - batch_m
+    else:
+        m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
+        m_list = m_list * (max_m / np.max(m_list))
+        m_list = torch.cuda.FloatTensor(m_list)
+        # [0.158, 0.179, 0.204, 0.232, 0.263, 0.299, 0.3407, 0.387, 0.441, 0.500]
+
+        batch_m = torch.matmul(m_list[None, :], index_float.transpose(0,1))
+        batch_m = batch_m.view((-1, 1))
+        x_m = x - batch_m
 
     output = torch.where(index, x_m, x)
     return F.cross_entropy(scale*output,target,per_cls_weight)
@@ -306,8 +355,6 @@ def weight(freq_bias, target, args):
 
     if True:
         mask = (target == torch.transpose(target[None,:], 0, 1)).float()
-        #mask = mask / torch.sum(mask, dim=1, keepdim=True).float()
-        #batch_freq = torch.matmul(mask, torch.sigmoid(freq_bias))
         freq_bias = torch.sigmoid(freq_bias) * topk_false_mask[:,None]
         freq_cls_bias = torch.sigmoid(freq_bias) * topk_true_mask[:,None]
 
@@ -328,16 +375,34 @@ def weight(freq_bias, target, args):
     ent_v = ent_v.sum() / (topk_false_mask.sum() + 1)
     skew_v = skew_v.sum() / (topk_false_mask.sum() + 1)
 
-    if skew_v > args.skew_th :
-        beta = 1.0 - ent_v * args.ent_sc
-    elif skew_v < -args.skew_th :
-        beta = 1.0 - ent_v * args.ent_sc
+
+    if False:
+
+        if skew_v > args.skew_th :
+            beta = 1.0 - ent_v * args.ent_sc
+        elif skew_v < -args.skew_th :
+            beta = 1.0 - ent_v * args.ent_sc
+        else:
+            beta = 0.0
+
     else:
-        beta = 0.0
+        beta = args.beta
 
     beta = np.clip(beta, 0,1)
 
-    cls_num_list = batch_cls_freq.sum(0)
+
+    if False:
+        # ldam-exp_margin_v1
+        cls_num_list = (batch_cls_freq.sum(0) + 1) # plus 1 affects top-1 acc.
+    elif False:
+        cls_num_list = args.cls_num_list
+    elif True:
+        # ldam-exp_margin_v2
+        index = torch.zeros_like(freq_bias, dtype=torch.uint8)
+        index.scatter_(1, target.data.view(-1, 1), 1)
+        index_float = index.type(torch.cuda.FloatTensor)
+
+        cls_num_list = (index_float.sum(0).data.cpu() + 1) # plus 1 affects top-1 acc.
 
     effect_num = 1.0 - np.power(beta, cls_num_list)
     per_cls_weights = (1.0 - beta) / np.array(effect_num)
@@ -378,7 +443,9 @@ def train(train_loader, model, criterion, optimizer, epoch, args, log, tf_writer
                              args.cls_num_list,
                              per_cls_weight,
                              scale=args.scale,
-                             max_m=args.max_m)
+                             max_m=args.max_m,
+                             gamma=args.gamma,
+                             margin=True)
         else:
             loss = criterion(output, targe)
 
@@ -445,7 +512,9 @@ def validate(val_loader, model, criterion, epoch, args, log=None, tf_writer=None
                                  args.cls_num_list,
                                  per_cls_weight,
                                  scale=args.scale,
-                                 max_m=args.max_m)
+                                 max_m=args.max_m,
+                                 gamma=args.gamma,
+                                 margin=True)
             else:
                 loss = criterion(output, targe)
 
@@ -489,7 +558,7 @@ def validate(val_loader, model, criterion, epoch, args, log=None, tf_writer=None
         tf_writer.add_scalar('loss/test_'+ flag, losses.avg, epoch)
         tf_writer.add_scalar('acc/test_' + flag + '_top1', top1.avg, epoch)
         tf_writer.add_scalar('acc/test_' + flag + '_top5', top5.avg, epoch)
-        tf_writer.add_scalars('acc/test_' + flag + '_cls_acc', {str(i):x for i, x in enumerate(cls_acc)}, epoch)
+        #tf_writer.add_scalars('acc/test_' + flag + '_cls_acc', {str(i):x for i, x in enumerate(cls_acc)}, epoch)
 
     return top1.avg
 
