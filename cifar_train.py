@@ -343,8 +343,9 @@ def weight(freq_bias, target, args):
     topk_true_mask = (topk_idx[:,0] == target).float()
     topk_false_mask = (topk_idx[:,0] != target).float()
     target_mask = (to_onehot(target, 10,1) > 0.0).float()
+    num_cls = len(args.cls_num_list)
 
-    if True:
+    if False:
         mask = (target == torch.transpose(target[None,:], 0, 1)).float()
         freq_bias = torch.sigmoid(freq_bias) * topk_false_mask[:,None]
         freq_cls_bias = torch.sigmoid(freq_bias) * topk_true_mask[:,None]
@@ -353,18 +354,19 @@ def weight(freq_bias, target, args):
         batch_cls_freq = freq_cls_bias.data.cpu().numpy()
 
         cls_order = batch_freq[:, cls_num_idx]
-        ent_v = entropy(cls_order, base=10, axis=1)
+        ent_v = entropy(cls_order, base=num_cls, axis=1)
         skew_v = skew(cls_order, axis=1)
 
-    else:
+    elif False:
         batch_freq = torch.sigmoid(freq_bias).data.cpu().numpy()
         cls_order = batch_freq[:, cls_num_idx]
-        ent_v = entropy(cls_order, base=10, axis=1) * topk_false_mask.data.cpu().numpy()
+        ent_v = entropy(cls_order, base=num_cls, axis=1) * topk_false_mask.data.cpu().numpy()
         skew_v = skew(cls_order, axis=1) * topk_false_mask.data.cpu().numpy()
 
-
-    ent_v = ent_v.sum() / (topk_false_mask.sum() + 1)
-    skew_v = skew_v.sum() / (topk_false_mask.sum() + 1)
+        ent_v = ent_v.sum() / (topk_false_mask.sum() + 1)
+        skew_v = skew_v.sum() / (topk_false_mask.sum() + 1)
+    else:
+        None
 
     if False:
         if skew_v > args.skew_th :
@@ -394,7 +396,7 @@ def weight(freq_bias, target, args):
     effect_num = 1.0 - np.power(beta, cls_num_list)
     per_cls_weights = (1.0 - beta) / np.array(effect_num)
     per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
-    per_cls_weight = torch.FloatTensor(per_cls_weights).cuda()
+    per_cls_weight = torch.FloatTensor(per_cls_weights).cuda(freq_bias.get_device())
 
     return per_cls_weight, cls_num_list
 
@@ -461,7 +463,8 @@ def train(train_loader, model, criterion, optimizer, epoch, args, log, tf_writer
                 epoch, i, len(train_loader), batch_time=batch_time,
                 data_time=data_time, loss=losses, top1=top1, top5=top5, lr=optimizer.param_groups[-1]['lr'] * 0.1))  # TODO
             print(output)
-            print('per_cls_weight={}'.format(per_cls_weight))
+            if False:
+                print('per_cls_weight={}'.format(per_cls_weight))
             log.write(output + '\n')
             log.flush()
 

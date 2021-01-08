@@ -7,6 +7,7 @@ export CUDA_VISIBLE_DEVICES=$2
 
 if [ $1 == 'ce' ]; then
     python cifar_train.py \
+           --dataset cifar100 \
            --gpu 0 --imb_type exp \
            --imb_factor 0.01 \
            --loss_type CE \
@@ -14,6 +15,7 @@ if [ $1 == 'ce' ]; then
 
 elif [ $1 == 'ldam' ]; then
     python cifar_train.py \
+           --dataset cifar100 \
            --gpu 0 --imb_type exp \
            --imb_factor 0.01 \
            --loss_type LDAM \
@@ -21,6 +23,7 @@ elif [ $1 == 'ldam' ]; then
 
 elif [ $1 == 'unbiased' ]; then
     python cifar_train.py \
+           --dataset cifar100 \
            --gpu 0 --imb_type exp \
            --imb_factor 0.01 \
            --loss_type Unbiased \
@@ -32,8 +35,9 @@ elif [ $1 == 'unbiased' ]; then
 
 elif [ $1 == 'unbiased-ldam' ]; then
     python cifar_train.py \
+           --dataset cifar100 \
            --gpu 0 --imb_type exp \
-           --imb_factor 0.01 \
+           --imb_factor 0.1 \
            --loss_type Unbiased-ldam \
            --train_rule Unbiased-ldam \
            --epochs 200 \
@@ -41,7 +45,7 @@ elif [ $1 == 'unbiased-ldam' ]; then
            --ent_sc 1.0 \
            --scale 30.0 \
            --max_m 0.0 \
-           --gamma 2.0 \
+           --gamma 5.0 \
            --exp_str unbiased-ldam
 
 fi
