@@ -66,7 +66,7 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on validation set')
 parser.add_argument('--pretrained', dest='pretrained', action='store_true',
                     help='use pre-trained model')
-parser.add_argument('--seed', default=None, type=int,
+parser.add_argument('--seed', default=10, type=int,
                     help='seed for initializing training. ')
 parser.add_argument('--gpu', default=None, type=int,
                     help='GPU id to use.')
@@ -85,7 +85,8 @@ best_acc1 = 0
 
 def main():
     args = parser.parse_args()
-    args.store_name = '_'.join([args.dataset, args.arch, args.loss_type, args.train_rule, args.imb_type, str(args.imb_factor), args.exp_str])
+    args.store_name = '_'.join([args.dataset, args.arch, args.loss_type, args.train_rule,
+                                args.imb_type, str(args.imb_factor), args.exp_str])
     if args.loss_type == 'Unbiased':
         args.store_name = '_'.join([args.store_name,'skew_th',str(args.skew_th)])
         args.store_name = '_'.join([args.store_name,'ent_sc',str(args.ent_sc)])
@@ -127,7 +128,6 @@ def main_worker(gpu, ngpus_per_node, args):
     num_classes = 100 if args.dataset == 'cifar100' else 10
     use_norm = True if args.loss_type in ['LDAM', 'Unbiased','Unbiased-ldam'] else False
     model = models.__dict__[args.arch](num_classes=num_classes, use_norm=use_norm)
-
     if args.gpu is not None:
         torch.cuda.set_device(args.gpu)
         model = model.cuda(args.gpu)
@@ -255,10 +255,10 @@ def main_worker(gpu, ngpus_per_node, args):
             #return
 
         # train for one epoch
-        train(train_loader, model, criterion, optimizer, epoch, args, log_training, tf_writer)
+        train(train_loader, model, per_cls_weights, criterion, optimizer, epoch, args, log_training, tf_writer)
 
         # evaluate on validation set
-        acc1 = validate(val_loader, model, criterion, epoch, args, log_testing, tf_writer)
+        acc1 = validate(val_loader, model, per_cls_weights, criterion, epoch, args, log_testing, tf_writer)
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
@@ -303,12 +303,7 @@ def obj_margins(rm_obj_dists, labels, index_float, max_m, gamma=10.0):
     mask_ng = (batch_m > 0).float()
     batch_ng = torch.exp(-batch_m-max_m) * mask_ng
 
-
     batch_m = batch_ng + batch_fg
-
-    # 73.77 // wo : 74.06
-    # max : 1.0, min : -inf
-    #batch_m = batch_m * (0.5 / batch_m.max())
 
     return batch_m.data
 
@@ -336,71 +331,7 @@ def ldam_loss(x, target, cls_num_list, per_cls_weight, scale=30 ,max_m=0.5,
     output = torch.where(index, x_m, x)
     return F.cross_entropy(scale*output, target, weight=per_cls_weight)
 
-def weight(freq_bias, target, args):
-    cls_num_idx = np.array(args.cls_num_list).argsort()[::-1]
-
-    topk_prob, topk_idx = F.softmax(freq_bias,1).topk(1)
-    topk_true_mask = (topk_idx[:,0] == target).float()
-    topk_false_mask = (topk_idx[:,0] != target).float()
-    target_mask = (to_onehot(target, 10,1) > 0.0).float()
-    num_cls = len(args.cls_num_list)
-
-    if False:
-        mask = (target == torch.transpose(target[None,:], 0, 1)).float()
-        freq_bias = torch.sigmoid(freq_bias) * topk_false_mask[:,None]
-        freq_cls_bias = torch.sigmoid(freq_bias) * topk_true_mask[:,None]
-
-        batch_freq = freq_bias.data.cpu().numpy()
-        batch_cls_freq = freq_cls_bias.data.cpu().numpy()
-
-        cls_order = batch_freq[:, cls_num_idx]
-        ent_v = entropy(cls_order, base=num_cls, axis=1)
-        skew_v = skew(cls_order, axis=1)
-
-    elif False:
-        batch_freq = torch.sigmoid(freq_bias).data.cpu().numpy()
-        cls_order = batch_freq[:, cls_num_idx]
-        ent_v = entropy(cls_order, base=num_cls, axis=1) * topk_false_mask.data.cpu().numpy()
-        skew_v = skew(cls_order, axis=1) * topk_false_mask.data.cpu().numpy()
-
-        ent_v = ent_v.sum() / (topk_false_mask.sum() + 1)
-        skew_v = skew_v.sum() / (topk_false_mask.sum() + 1)
-    else:
-        None
-
-    if False:
-        if skew_v > args.skew_th :
-            beta = 1.0 - ent_v * args.ent_sc
-        elif skew_v < -args.skew_th :
-            beta = 1.0 - ent_v * args.ent_sc
-        else:
-            beta = 0.0
-    else:
-        beta = args.beta
-
-    beta = np.clip(beta, 0,1)
-
-    if False:
-        # ldam-exp_margin_v1
-        cls_num_list = (batch_cls_freq.sum(0) + 1) # plus 1 affects top-1 acc.
-    elif True:
-        cls_num_list = args.cls_num_list
-    elif False:
-        # ldam-exp_margin_v2
-        index = torch.zeros_like(freq_bias, dtype=torch.uint8)
-        index.scatter_(1, target.data.view(-1, 1), 1)
-        index_float = index.type(torch.cuda.FloatTensor)
-
-        cls_num_list = (index_float.sum(0).data.cpu() + 1) # plus 1 affects top-1 acc.
-
-    effect_num = 1.0 - np.power(beta, cls_num_list)
-    per_cls_weights = (1.0 - beta) / np.array(effect_num)
-    per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
-    per_cls_weight = torch.FloatTensor(per_cls_weights).cuda(freq_bias.get_device())
-
-    return per_cls_weight, cls_num_list
-
-def train(train_loader, model, criterion, optimizer, epoch, args, log, tf_writer):
+def train(train_loader, model, per_cls_weights, criterion, optimizer, epoch, args, log, tf_writer):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -422,15 +353,12 @@ def train(train_loader, model, criterion, optimizer, epoch, args, log, tf_writer
         # compute output
         output = model(input)
         if args.loss_type == 'Unbiased':
-            per_cls_weight, cls_num_list = weight(output.data, target, args)
-            loss = F.cross_entropy(output, target, per_cls_weight)
+            loss = F.cross_entropy(output, target, per_cls_weights)
         elif args.loss_type == 'Unbiased-ldam':
-            per_cls_weight, cls_num_list = weight(output.data, target, args)
-
             loss = ldam_loss(output,
                              target,
                              args.cls_num_list,
-                             per_cls_weight,
+                             per_cls_weights,
                              scale=args.scale,
                              max_m=args.max_m,
                              gamma=args.gamma,
@@ -463,8 +391,6 @@ def train(train_loader, model, criterion, optimizer, epoch, args, log, tf_writer
                 epoch, i, len(train_loader), batch_time=batch_time,
                 data_time=data_time, loss=losses, top1=top1, top5=top5, lr=optimizer.param_groups[-1]['lr'] * 0.1))  # TODO
             print(output)
-            if False:
-                print('per_cls_weight={}'.format(per_cls_weight))
             log.write(output + '\n')
             log.flush()
 
@@ -473,7 +399,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, log, tf_writer
     tf_writer.add_scalar('acc/train_top5', top5.avg, epoch)
     tf_writer.add_scalar('lr', optimizer.param_groups[-1]['lr'], epoch)
 
-def validate(val_loader, model, criterion, epoch, args, log=None, tf_writer=None, flag='val'):
+def validate(val_loader, model, per_cls_weights, criterion, epoch, args, log=None, tf_writer=None, flag='val'):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
@@ -493,15 +419,13 @@ def validate(val_loader, model, criterion, epoch, args, log=None, tf_writer=None
             # compute output
             output = model(input)
             if args.loss_type == 'Unbiased' and False:
-                per_cls_weight, cls_num_list = weight(output.data, target, args)
                 loss = F.cross_entropy(output, target.long(), per_cls_weight)
 
             elif args.loss_type == 'Unbiased-ldam' and False:
-                per_cls_weight, cls_num_list = weight(output.data, target, args)
                 loss = ldam_loss(output,
                                  target,
                                  args.cls_num_list,
-                                 per_cls_weight,
+                                 per_cls_weights,
                                  scale=args.scale,
                                  max_m=args.max_m,
                                  gamma=args.gamma,
