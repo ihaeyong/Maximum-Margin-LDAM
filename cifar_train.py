@@ -91,8 +91,13 @@ def main():
         args.store_name = '_'.join([args.store_name,'skew_th',str(args.skew_th)])
         args.store_name = '_'.join([args.store_name,'ent_sc',str(args.ent_sc)])
     if args.loss_type == 'Unbiased-ldam':
-        args.store_name = '_'.join([args.store_name,'skew_th',str(args.skew_th)])
-        args.store_name = '_'.join([args.store_name,'ent_sc',str(args.ent_sc)])
+        args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
+        args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
+        args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
+
+    if args.loss_type == 'Unbiased-batch':
+        #args.store_name = '_'.join([args.store_name,'skew_th',str(args.skew_th)])
+        #args.store_name = '_'.join([args.store_name,'ent_sc',str(args.ent_sc)])
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
         args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
@@ -237,6 +242,14 @@ def main_worker(gpu, ngpus_per_node, args):
             per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
 
             args.beta = betas[idx]
+
+        elif args.train_rule == 'Unbiased-batch':
+            train_sampler = None
+            per_cls_weights = None
+            idx = epoch // 160
+            betas = [0, 0.9999]
+
+            args.beta = betas[idx]
         else:
             warnings.warn('Sample rule is not listed')
 
@@ -251,6 +264,7 @@ def main_worker(gpu, ngpus_per_node, args):
             criterion = LDAMLoss(cls_num_list=cls_num_list, max_m=0.5, s=30,
                                  weight=per_cls_weights).cuda(args.gpu)
         else:
+            criterion = None
             warnings.warn('Loss type is not listed')
             #return
 
@@ -307,6 +321,25 @@ def obj_margins(rm_obj_dists, labels, index_float, max_m, gamma=10.0):
 
     return batch_m.data
 
+def weight(freq_bias, target, args):
+
+    index = torch.zeros_like(freq_bias, dtype=torch.uint8)
+    index.scatter_(1, target.data.view(-1, 1), 1)
+    index_float = index.type(torch.cuda.FloatTensor)
+
+    # plus 1 affects top-1 acc.
+    cls_num_list = (index_float.sum(0).data.cpu() + 1)
+
+    beta = args.beta
+
+    effect_num = 1.0 - np.power(beta, cls_num_list)
+    per_cls_weights = (1.0 - beta) / np.array(effect_num)
+    per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+    per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
+
+    return per_cls_weights
+
+
 def ldam_loss(x, target, cls_num_list, per_cls_weight, scale=30 ,max_m=0.5,
               gamma=10.0, margin=False):
 
@@ -362,7 +395,18 @@ def train(train_loader, model, per_cls_weights, criterion, optimizer, epoch, arg
                              scale=args.scale,
                              max_m=args.max_m,
                              gamma=args.gamma,
-                             margin=False)
+                             margin=True)
+
+        elif args.loss_type == 'Unbiased-batch':
+            per_cls_weights = weight(output, target, args)
+            loss = ldam_loss(output,
+                             target,
+                             args.cls_num_list,
+                             per_cls_weights,
+                             scale=args.scale,
+                             max_m=args.max_m,
+                             gamma=args.gamma,
+                             margin=True)
         else:
             loss = criterion(output, target)
 
@@ -418,10 +462,10 @@ def validate(val_loader, model, per_cls_weights, criterion, epoch, args, log=Non
 
             # compute output
             output = model(input)
-            if args.loss_type == 'Unbiased' and False:
+            if args.loss_type == 'Unbiased':
                 loss = F.cross_entropy(output, target.long(), per_cls_weight)
 
-            elif args.loss_type == 'Unbiased-ldam' and False:
+            elif args.loss_type == 'Unbiased-ldam':
                 loss = ldam_loss(output,
                                  target,
                                  args.cls_num_list,
@@ -429,7 +473,18 @@ def validate(val_loader, model, per_cls_weights, criterion, epoch, args, log=Non
                                  scale=args.scale,
                                  max_m=args.max_m,
                                  gamma=args.gamma,
-                                 margin=False)
+                                 margin=True)
+
+            elif args.loss_type == 'Unbiased-batch':
+                per_cls_weights = weight(output, target, args)
+                loss = ldam_loss(output,
+                                 target,
+                                 args.cls_num_list,
+                                 per_cls_weights,
+                                 scale=args.scale,
+                                 max_m=args.max_m,
+                                 gamma=args.gamma,
+                                 margin=True)
             else:
                 loss = criterion(output, target)
 
