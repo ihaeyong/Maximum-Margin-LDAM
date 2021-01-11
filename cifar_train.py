@@ -85,8 +85,8 @@ best_acc1 = 0
 
 def main():
     args = parser.parse_args()
-
-    args.root_log = '_'.join([args.root_log, '/', args.imb_type, str(args.imb_factor)])
+    args.root_log = '/'.join([args.root_log, args.dataset, args.imb_type])
+    args.root_log = '_'.join([args.root_log, str(args.imb_factor)])
 
     args.store_name = '_'.join([args.dataset, args.arch, args.loss_type, args.train_rule,
                                 args.imb_type, str(args.imb_factor), args.exp_str])
