@@ -101,6 +101,8 @@ def main():
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
         args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
+        
+    args.store_name = '_'.join([args.store_name,'seed',str(args.seed)])
 
     prepare_folders(args)
     if args.seed is not None:
