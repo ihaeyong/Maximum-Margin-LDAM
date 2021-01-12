@@ -366,6 +366,18 @@ def ldam_loss(x, target, cls_num_list, per_cls_weight, scale=30 ,max_m=0.5,
     index_float = index.type(torch.cuda.FloatTensor)
 
     if margin :
+        if True:
+            m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
+            # [0.11, 0.13, 0.15, 0.17, 0.19, 0.22, 0.25, 0.29, 0.33, 0.37]
+            m_list = m_list * (0.5 / np.max(m_list))
+            m_list = torch.cuda.FloatTensor(m_list)
+            # [0.15, 0.17, 0.20, 0.23, 0.26, 0.29, 0.340, 0.38, 0.44, 0.50]
+
+            batch_m = torch.matmul(m_list[None, :], index_float.transpose(0,1))
+            batch_m = batch_m.view((-1, 1))
+
+            max_m = batch_m
+
         batch_m = obj_margins(x, target, index_float, max_m, gamma)
         x_m = x - batch_m
     else:
