@@ -23,15 +23,17 @@ elif [ $1 == 'ldam' ]; then
 
 elif [ $1 == 'unbiased' ]; then
     python cifar_train.py \
-           --dataset cifar100 \
+           --dataset cifar10 \
            --gpu 0 --imb_type exp \
-           --imb_factor 0.01 \
+           --imb_factor 0.1 \
            --loss_type Unbiased \
-           --train_rule None \
-           --epochs 300 \
-           --skew_th 2.9 \
-           --ent_sc 1.0 \
-           --exp_str unbiased
+           --train_rule Unbiased \
+           --epochs 200 \
+           --scale 11.0 \
+           --max_m 1.4 \
+           --gamma 1.5 \
+           --seed 1 \
+           --exp_str none
 
 elif [ $1 == 'unbiased-ldam' ]; then
     python cifar_train.py \
@@ -43,7 +45,7 @@ elif [ $1 == 'unbiased-ldam' ]; then
            --epochs 200 \
            --skew_th 2.9 \
            --ent_sc 1.0 \
-           --scale 0.0 \
+           --scale 16.0 \
            --max_m 1.4 \
            --gamma 1.5 \
            --seed 1 \

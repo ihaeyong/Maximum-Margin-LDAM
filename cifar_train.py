@@ -91,8 +91,9 @@ def main():
     args.store_name = '_'.join([args.dataset, args.arch, args.loss_type, args.train_rule,
                                 args.imb_type, str(args.imb_factor), args.exp_str])
     if args.loss_type == 'Unbiased':
-        args.store_name = '_'.join([args.store_name,'skew_th',str(args.skew_th)])
-        args.store_name = '_'.join([args.store_name,'ent_sc',str(args.ent_sc)])
+        args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
+        args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
+        args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
     if args.loss_type == 'Unbiased-ldam':
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
@@ -104,7 +105,7 @@ def main():
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
         args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
-        
+
     args.store_name = '_'.join([args.store_name,'seed',str(args.seed)])
 
     prepare_folders(args)
@@ -237,7 +238,19 @@ def main_worker(gpu, ngpus_per_node, args):
             per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
             per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
             per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
-        elif args.train_rule == 'Unbiased' or args.train_rule == 'Unbiased-ldam':
+
+        elif args.train_rule == 'Unbiased':
+            train_sampler = None
+            idx = epoch // 160
+            betas = [0, 0]
+            effective_num = 1.0 - np.power(betas[idx], cls_num_list)
+            per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
+            per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+            per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
+
+            args.beta = betas[idx]
+
+        elif args.train_rule == 'Unbiased-ldam':
             train_sampler = None
             idx = epoch // 160
             betas = [0, 0.9999]
@@ -391,7 +404,14 @@ def train(train_loader, model, per_cls_weights, criterion, optimizer, epoch, arg
         # compute output
         output = model(input)
         if args.loss_type == 'Unbiased':
-            loss = F.cross_entropy(output, target, per_cls_weights)
+            loss = ldam_loss(output,
+                             target,
+                             args.cls_num_list,
+                             per_cls_weights,
+                             scale=args.scale,
+                             max_m=args.max_m,
+                             gamma=args.gamma,
+                             margin=True)
         elif args.loss_type == 'Unbiased-ldam':
             loss = ldam_loss(output,
                              target,
@@ -468,9 +488,17 @@ def validate(val_loader, model, per_cls_weights, criterion, epoch, args, log=Non
             # compute output
             output = model(input)
             if args.loss_type == 'Unbiased':
-                loss = F.cross_entropy(output, target.long(), per_cls_weight)
+                loss = ldam_loss(output,
+                                 target,
+                                 args.cls_num_list,
+                                 per_cls_weights,
+                                 scale=args.scale,
+                                 max_m=args.max_m,
+                                 gamma=args.gamma,
+                                 margin=True)
 
             elif args.loss_type == 'Unbiased-ldam':
+
                 loss = ldam_loss(output,
                                  target,
                                  args.cls_num_list,
