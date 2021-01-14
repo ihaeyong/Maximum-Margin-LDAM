@@ -45,11 +45,11 @@ elif [ $1 == 'unbiased-ldam' ]; then
            --epochs 200 \
            --skew_th 2.9 \
            --ent_sc 1.0 \
-           --scale 17.0 \
-           --max_m 0.3 \
-           --gamma 1.1 \
+           --scale 10.0 \
+           --max_m 2.6 \
+           --gamma 1.6 \
            --seed 1 \
-           --exp_str const_margin
+           --exp_str minus
 
 elif [ $1 == 'unbiased-batch' ]; then
     python cifar_train.py \

@@ -325,15 +325,22 @@ def obj_margins(rm_obj_dists, labels, index_float, max_m, gamma=10.0):
         min_pos_prob - max_neg_prob,
         torch.zeros_like(max_neg_prob))[:,None]
 
+    m_type = 'minus'
     mask_fg = (batch_m > 0).float()
-    batch_fg = torch.exp(-batch_m - max_m * gamma) * mask_fg
+    if m_type is 'minus':
+        batch_fg = torch.exp(-batch_m - max_m * gamma) * mask_fg
+    elif m_type is 'prod':
+        batch_fg = torch.exp(-batch_m - max_m * gamma) * mask_fg
 
     batch_m = torch.max(
         max_neg_prob - min_pos_prob,
         torch.zeros_like(max_neg_prob))[:,None]
 
     mask_ng = (batch_m > 0).float()
-    batch_ng = torch.exp(-batch_m - max_m) * mask_ng
+    if m_type is 'minus':
+        batch_ng = torch.exp(-batch_m - max_m) * mask_ng
+    elif m_type is 'prod':
+        batch_ng = torch.exp(-batch_m * max_m) * mask_ng
 
     batch_m = batch_ng + batch_fg
 
@@ -366,17 +373,19 @@ def ldam_loss(x, target, cls_num_list, per_cls_weight, scale=30 ,max_m=0.5,
     index_float = index.type(torch.cuda.FloatTensor)
 
     if margin :
-        if True:
-            m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
-            # [0.11, 0.13, 0.15, 0.17, 0.19, 0.22, 0.25, 0.29, 0.33, 0.37]
-            #m_list = m_list * (max_m / np.max(m_list))
-            m_list = torch.cuda.FloatTensor(m_list)
-            # [0.15, 0.17, 0.20, 0.23, 0.26, 0.29, 0.340, 0.38, 0.44, 0.50]
+        m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
+        # [0.11, 0.13, 0.15, 0.17, 0.19, 0.22, 0.25, 0.29, 0.33, 0.37]
+        m_list = m_list * (0.5 / np.max(m_list))
+        m_list = torch.cuda.FloatTensor(m_list)
+        # [0.15, 0.17, 0.20, 0.23, 0.26, 0.29, 0.340, 0.38, 0.44, 0.50]
 
-            batch_m = torch.matmul(m_list[None, :], index_float.transpose(0,1))
-            batch_m = batch_m.view((-1, 1))
+        batch_m = torch.matmul(m_list[None, :], index_float.transpose(0,1))
+        batch_m = batch_m.view((-1, 1))
 
+        if False:
             max_m = max_m / batch_m
+        else:
+            max_m = max_m - batch_m
 
         batch_m = obj_margins(x, target, index_float, max_m, gamma)
         x_m = x - batch_m
