@@ -45,9 +45,9 @@ elif [ $1 == 'unbiased-ldam' ]; then
            --epochs 200 \
            --skew_th 2.9 \
            --ent_sc 1.0 \
-           --scale 10.0 \
+           --scale 18.0 \
            --max_m 2.6 \
-           --gamma 1.6 \
+           --gamma 1.5 \
            --seed 1 \
            --exp_str minus
 
