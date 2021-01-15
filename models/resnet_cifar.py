@@ -27,7 +27,9 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from torch.nn import Parameter
 
-__all__ = ['ResNet_s', 'resnet20', 'resnet32', 'resnet44', 'resnet56', 'resnet110', 'resnet1202']
+import torchvision
+
+__all__ = ['ResNet_s','ResNet18','resnet18', 'resnet20', 'resnet32', 'resnet44', 'resnet56', 'resnet110', 'resnet1202']
 
 def _weights_init(m):
     classname = m.__class__.__name__
@@ -123,6 +125,32 @@ class ResNet_s(nn.Module):
         out = self.linear(out)
         return out
 
+
+class ResNet18(nn.Module):
+
+    def __init__(self, num_classes=200, use_norm=False):
+        super(ResNet18, self).__init__()
+
+
+        self.model = torchvision.models.resnet18(pretrained=False)
+
+        if use_norm:
+            linear = NormedLinear(512, num_classes)
+        else:
+            linear = nn.Linear(512, num_classes)
+
+        self.model.fc = linear
+
+        self.model.apply(_weights_init)
+
+    def forward(self, x):
+        out = self.model(x)
+
+        return out
+
+
+def resnet18(num_classes=200, use_norm=False):
+    return ResNet18(num_classes=num_classes, use_norm=use_norm)
 
 def resnet20():
     return ResNet_s(BasicBlock, [3, 3, 3])

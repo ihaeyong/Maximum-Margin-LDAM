@@ -47,7 +47,7 @@ class IMBALANCECIFAR10(torchvision.datasets.CIFAR10):
         new_data = np.vstack(new_data)
         self.data = new_data
         self.targets = new_targets
-        
+
     def get_cls_num_list(self):
         cls_num_list = []
         for i in range(self.cls_num):
