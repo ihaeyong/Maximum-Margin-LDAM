@@ -14,7 +14,8 @@ if [ $1 == 'ce' ]; then
            --seed 1 \
            --epochs 120 \
            --batch-size 128 \
-           --train_rule None
+           --train_rule None \
+           --exp_str warmup_1crop
 
 elif [ $1 == 'ldam' ]; then
     python tiny_imagenet_train.py \
@@ -22,7 +23,8 @@ elif [ $1 == 'ldam' ]; then
            --gpu 0 --imb_type exp \
            --imb_factor 0.01 \
            --loss_type LDAM \
-           --train_rule DRW
+           --train_rule DRW \
+           --seed 1 
 
 elif [ $1 == 'unbiased' ]; then
     python tiny_imagenet_train.py \
@@ -41,16 +43,14 @@ elif [ $1 == 'unbiased' ]; then
 elif [ $1 == 'unbiased-ldam' ]; then
     python tiny_imagenet_train.py \
            --dataset tiny \
-           --gpu 0 --imb_type step \
-           --imb_factor 0.1 \
+           --gpu 0 --imb_type exp \
+           --imb_factor 0.01 \
            --loss_type Unbiased-ldam \
            --train_rule Unbiased-ldam \
-           --epochs 200 \
-           --skew_th 2.9 \
-           --ent_sc 1.0 \
-           --scale 18.0 \
+           --epochs 120 \
+           --scale 30.0 \
            --max_m 2.6 \
-           --gamma 1.5 \
+           --gamma 1.1 \
            --seed 1 \
            --exp_str minus
 fi

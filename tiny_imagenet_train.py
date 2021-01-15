@@ -44,7 +44,7 @@ parser.add_argument('--rand_number', default=0, type=int, help='fix random numbe
 parser.add_argument('--exp_str', default='0', type=str, help='number to indicate which experiment it is')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
-parser.add_argument('--epochs', default=200, type=int, metavar='N',
+parser.add_argument('--epochs', default=120, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -100,8 +100,6 @@ def main():
         args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
 
     if args.loss_type == 'Unbiased-batch':
-        #args.store_name = '_'.join([args.store_name,'skew_th',str(args.skew_th)])
-        #args.store_name = '_'.join([args.store_name,'ent_sc',str(args.ent_sc)])
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
         args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
@@ -169,16 +167,27 @@ def main_worker(gpu, ngpus_per_node, args):
 
     cudnn.benchmark = True
 
+    mean=[0.485, 0.456, 0.406]
+    std=[0.229, 0.224, 0.225]
+
+    #mean=[0.5, 0.5, 0.5]
+    #std=[0.25, 0.25, 0.25]
+
     # Data loading code
-    normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                                     std=[0.25, 0.25, 0.25])
+    normalize = transforms.Normalize(mean=mean,
+                                     std=std)
     side = 64; padding = 8
     transform_train = transforms.Compose(
         [transforms.RandomCrop(side, padding=padding),
          transforms.RandomHorizontalFlip(),
          transforms.ToTensor(), normalize])
 
-    transform_val = transforms.Compose([transforms.ToTensor(), normalize])
+    if False:
+        transform_val = transforms.Compose([transforms.ToTensor(), normalize])
+    else:
+        transform_val = transforms.Compose(
+        [transforms.RandomCrop(side, padding=1),
+         transforms.ToTensor(), normalize])
 
     if args.dataset == 'tiny':
         train_dataset = IMBALANCE_TINY_IMAGENET(
@@ -190,8 +199,17 @@ def main_worker(gpu, ngpus_per_node, args):
             download=True,
             transform=transform_train)
 
-        val_dataset = TinyImageFolder(root="./data/tiny-imagenet-200/val",
-                                   transform=transform_val)
+        #val_dataset = TinyImageFolder(root="./data/tiny-imagenet-200/val",
+        #                           transform=transform_val)
+
+        val_dataset = IMBALANCE_TINY_IMAGENET(
+            root='./data/tiny-imagenet-200/val',
+            imb_type=args.imb_type,
+            imb_factor=args.imb_factor,
+            rand_number=args.rand_number,
+            train=False,
+            download=True,
+            transform=transform_val)
     else:
         warnings.warn('Dataset is not listed')
         return
@@ -524,17 +542,6 @@ def validate(val_loader, model, per_cls_weights, criterion, epoch, args, log=Non
                                  max_m=args.max_m,
                                  gamma=args.gamma,
                                  margin=True)
-
-            elif args.loss_type == 'Unbiased-batch':
-                per_cls_weights = weight(output, target, args)
-                loss = ldam_loss(output,
-                                 target,
-                                 args.cls_num_list,
-                                 per_cls_weights,
-                                 scale=args.scale,
-                                 max_m=args.max_m,
-                                 gamma=args.gamma,
-                                 margin=True)
             else:
                 loss = criterion(output, target)
 
@@ -587,6 +594,7 @@ def adjust_learning_rate(optimizer, epoch, args):
     epoch = epoch + 1
     if epoch <= 5:
         lr = args.lr * epoch / 5
+        #lr = args.lr  # no_warmup
     elif epoch > 180:
         lr = args.lr * 0.0001
     elif epoch > 90:

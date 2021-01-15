@@ -104,6 +104,7 @@ class ResNet_s(nn.Module):
             self.linear = NormedLinear(64, num_classes)
         else:
             self.linear = nn.Linear(64, num_classes)
+
         self.apply(_weights_init)
 
     def _make_layer(self, block, planes, num_blocks, stride):

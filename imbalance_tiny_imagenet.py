@@ -9,7 +9,6 @@ class TinyImageFolder(dset.ImageFolder):
         super().__init__(**kwds)
 
 class IMBALANCE_TINY_IMAGENET(dset.ImageFolder):
-    cls_num = 200
 
     def __init__(self,
                  root,
@@ -24,16 +23,24 @@ class IMBALANCE_TINY_IMAGENET(dset.ImageFolder):
         super(IMBALANCE_TINY_IMAGENET, self).__init__(root, transform)
         np.random.seed(rand_number)
         # [5000, 2997, .... 50]
+        num_samples = len(self.targets)
+
         self.data = []
-        for i in range(len(self.targets)):
+        self.targets = []
+        for i in range(num_samples):
             self.data.append(self.__getitem__(i)[0])
+            self.targets.append(self.__getitem__(i)[1])
 
         self.data = torch.stack(self.data)
 
-        img_num_list = self.get_img_num_per_cls(self.cls_num,
-                                                imb_type,
-                                                imb_factor)
-        self.gen_imbalanced_data(img_num_list)
+        if train:
+            self.cls_num = 200
+            img_num_list = self.get_img_num_per_cls(self.cls_num,
+                                                    imb_type,
+                                                    imb_factor)
+            self.gen_imbalanced_data(img_num_list)
+        else:
+            None
 
     def get_img_num_per_cls(self, cls_num, imb_type, imb_factor):
         # self.data [50000, 32, 32, 3]
