@@ -94,15 +94,14 @@ def main():
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
         args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
-    if args.loss_type == 'Unbiased-ldam':
+    elif args.loss_type == 'Unbiased-ldam':
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
         args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
 
-    if args.loss_type == 'Unbiased-batch':
+    elif args.loss_type == 'LDAM':
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
-        args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
 
     args.store_name = '_'.join([args.store_name,'seed',str(args.seed)])
 
@@ -170,24 +169,24 @@ def main_worker(gpu, ngpus_per_node, args):
     mean=[0.485, 0.456, 0.406]
     std=[0.229, 0.224, 0.225]
 
-    #mean=[0.5, 0.5, 0.5]
-    #std=[0.25, 0.25, 0.25]
-
     # Data loading code
     normalize = transforms.Normalize(mean=mean,
                                      std=std)
     side = 64; padding = 8
     transform_train = transforms.Compose(
-        [transforms.RandomCrop(side, padding=padding),
-         transforms.RandomHorizontalFlip(),
-         transforms.ToTensor(), normalize])
+        [
+            transforms.RandomCrop(side, padding=padding),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(), normalize
+        ]
+    )
 
-    if False:
-        transform_val = transforms.Compose([transforms.ToTensor(), normalize])
-    else:
-        transform_val = transforms.Compose(
-        [transforms.RandomCrop(side, padding=1),
-         transforms.ToTensor(), normalize])
+    transform_val = transforms.Compose(
+        [
+            transforms.RandomCrop(side, padding=1),
+            transforms.ToTensor(), normalize
+        ]
+    )
 
     if args.dataset == 'tiny':
         train_dataset = IMBALANCE_TINY_IMAGENET(
@@ -287,7 +286,9 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.loss_type == 'CE':
             criterion = nn.CrossEntropyLoss(weight=per_cls_weights).cuda(args.gpu)
         elif args.loss_type == 'LDAM':
-            criterion = LDAMLoss(cls_num_list=cls_num_list, max_m=0.5, s=30,
+            criterion = LDAMLoss(cls_num_list=cls_num_list,
+                                 max_m=args.max_m,
+                                 s=args.scale,
                                  weight=per_cls_weights).cuda(args.gpu)
         elif args.loss_type == 'Focal':
             criterion = FocalLoss(weight=per_cls_weights, gamma=1).cuda(args.gpu)

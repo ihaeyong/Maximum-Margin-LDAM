@@ -15,7 +15,7 @@ if [ $1 == 'ce' ]; then
            --epochs 120 \
            --batch-size 128 \
            --train_rule None \
-           --exp_str non_warmup_crop_adaptive_avg_pooling
+           --exp_str non_warmup_crop_adaptive_avg_pooling_non_crop
 
 elif [ $1 == 'ldam' ]; then
     python tiny_imagenet_train.py \
@@ -24,7 +24,10 @@ elif [ $1 == 'ldam' ]; then
            --imb_factor 0.01 \
            --loss_type LDAM \
            --train_rule DRW \
-           --seed 1 
+           --scale 10.0 \
+           --max_m 0.4\
+           --seed 1 \
+           --exp_str none
 
 elif [ $1 == 'unbiased' ]; then
     python tiny_imagenet_train.py \
