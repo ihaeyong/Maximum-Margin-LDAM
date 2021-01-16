@@ -134,12 +134,13 @@ class ResNet18(nn.Module):
 
 
         self.model = torchvision.models.resnet18(pretrained=False)
+        self.model.avgpool = nn.AdaptiveAvgPool2d(1)
+        num_ftrs = self.model.fc.in_features
 
         if use_norm:
-            linear = NormedLinear(512, num_classes)
+            linear = NormedLinear(num_ftrs, num_classes)
         else:
-            linear = nn.Linear(512, num_classes)
-
+            linear = nn.Linear(num_ftrs, num_classes)
         self.model.fc = linear
 
         self.model.apply(_weights_init)
