@@ -130,7 +130,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # create model
     print("=> creating model '{}'".format(args.arch))
     num_classes = 200 if args.dataset == 'tiny' else 10
-    use_norm = True if args.loss_type in ['LDAM', 'Unbiased','Unbiased-ldam'] else False
+    use_norm = True if args.loss_type in ['LDAM', 'HMM'] else False
     model = models.__dict__[args.arch](num_classes=num_classes, use_norm=use_norm)
     if args.gpu is not None:
         torch.cuda.set_device(args.gpu)
@@ -232,7 +232,6 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.train_rule == 'None':
             train_sampler = None
             per_cls_weights = None
-
         elif args.train_rule == 'Resample':
             train_sampler = ImbalancedDatasetSampler(train_dataset)
             per_cls_weights = None

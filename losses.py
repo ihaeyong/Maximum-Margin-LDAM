@@ -79,29 +79,28 @@ class HMMLoss(nn.Module):
 
     def obj_margins(self, rm_obj_dists, labels, index_float, max_m):
 
-        obj_dists_ = F.softmax(rm_obj_dists, dim=1)
+        #obj_dists_ = F.softmax(rm_obj_dists, dim=1)
         obj_neg_labels = 1.0 - index_float
-        obj_neg_dists = obj_dists_ * obj_neg_labels
+        obj_neg_dists = rm_obj_dists * obj_neg_labels
 
-        min_pos_prob = obj_dists_[:, labels.data.cpu().numpy()[0]]
-        max_neg_prob = obj_neg_dists.max(1)[0]
+        min_pos_prob = rm_obj_dists[:, labels.data.cpu().numpy()[0]].data
+        max_neg_prob = obj_neg_dists.max(1)[0].data
 
         # estimate the margin between dists and gt labels
-        batch_m = torch.max(
+        batch_m_fg = torch.max(
             min_pos_prob - max_neg_prob,
-            torch.zeros_like(max_neg_prob))[:,None]
+            torch.zeros_like(min_pos_prob))[:,None]
 
-        mask_fg = (batch_m > 0).float()
-        batch_fg = torch.exp(-batch_m - max_m * self.gamma) * mask_fg
+        mask_fg = (batch_m_fg > 0).float()
+        batch_fg = torch.exp(-batch_m_fg - max_m * self.gamma) * mask_fg
 
-        batch_m = torch.max(
+        batch_m_bg = torch.max(
             max_neg_prob - min_pos_prob,
             torch.zeros_like(max_neg_prob))[:,None]
 
-        mask_ng = (batch_m > 0).float()
-        batch_ng = torch.exp(-batch_m - max_m) * mask_ng
+        mask_ng = (batch_m_bg > 0).float()
+        batch_ng = torch.exp(-batch_m_bg - max_m) * mask_ng
         batch_m = batch_ng + batch_fg
-
         return batch_m.data
 
     def forward(self, x, target):
@@ -112,10 +111,12 @@ class HMMLoss(nn.Module):
         batch_m = torch.matmul(self.m_list[None, :], index_float.transpose(0,1))
         batch_m = batch_m.view((-1, 1))
 
+        # 1.0 - [0.5] => [0.0 ~ 0.5]
         max_m = self.max_m - batch_m
-        batch_m = self.obj_margins(x, target, index_float, max_m)
+        with torch.no_grad():
+            batch_hmm = self.obj_margins(x, target, index_float, max_m)
 
-        x_m = x - batch_m
+        x_m = x - batch_hmm
 
         output = torch.where(index, x_m, x)
         return F.cross_entropy(self.s*output, target, weight=self.weight)

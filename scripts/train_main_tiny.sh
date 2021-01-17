@@ -39,7 +39,7 @@ elif [ $1 == 'hmm' ]; then
            --epochs 120 \
            --scale 10.0 \
            --max_m 2.7 \
-           --gamma 1.4 \
+           --gamma 1.5 \
            --seed 1 \
-           --exp_str 0
+           --exp_str logits
 fi
