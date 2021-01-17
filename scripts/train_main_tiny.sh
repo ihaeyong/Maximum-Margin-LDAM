@@ -23,37 +23,23 @@ elif [ $1 == 'ldam' ]; then
            --gpu 0 --imb_type exp \
            --imb_factor 0.01 \
            --loss_type LDAM \
-           --train_rule DRW \
+           --train_rule None \
            --scale 10.0 \
-           --max_m 0.4\
+           --max_m 0.5\
            --seed 1 \
-           --exp_str none
+           --exp_str 0
 
-elif [ $1 == 'unbiased' ]; then
+elif [ $1 == 'hmm' ]; then
     python tiny_imagenet_train.py \
            --dataset tiny \
            --gpu 0 --imb_type exp \
            --imb_factor 0.01 \
-           --loss_type Unbiased \
-           --train_rule Unbiased \
-           --epochs 200 \
-           --scale 10.0 \
-           --max_m 0.8 \
-           --gamma 1.0 \
-           --seed 1 \
-           --exp_str const_margin
-
-elif [ $1 == 'unbiased-ldam' ]; then
-    python tiny_imagenet_train.py \
-           --dataset tiny \
-           --gpu 0 --imb_type exp \
-           --imb_factor 0.01 \
-           --loss_type Unbiased-ldam \
-           --train_rule Unbiased-ldam \
+           --loss_type HMM \
+           --train_rule None \
            --epochs 120 \
            --scale 10.0 \
-           --max_m 2.6 \
-           --gamma 1.1 \
+           --max_m 2.7 \
+           --gamma 1.4 \
            --seed 1 \
-           --exp_str minus
+           --exp_str 0
 fi

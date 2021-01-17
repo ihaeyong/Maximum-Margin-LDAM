@@ -43,3 +43,79 @@ class LDAMLoss(nn.Module):
 
         output = torch.where(index, x_m, x)
         return F.cross_entropy(self.s*output, target, weight=self.weight)
+
+
+class HMMLoss(nn.Module):
+
+    def __init__(self, cls_num_list, max_m=0.5, weight=None, s=30, gamma=1.1):
+        super(HMMLoss, self).__init__()
+        m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
+        m_list = m_list * (0.5 / np.max(m_list))
+        m_list = torch.cuda.FloatTensor(m_list)
+        self.m_list = m_list
+        assert s > 0
+        self.s = s
+        self.weight = weight
+        self.max_m = max_m
+        self.gamma = gamma
+
+    def weight(self, freq_bias, target, args):
+
+        index = torch.zeros_like(freq_bias, dtype=torch.uint8)
+        index.scatter_(1, target.data.view(-1, 1), 1)
+        index_float = index.type(torch.cuda.FloatTensor)
+
+        # plus 1 affects top-1 acc.
+        cls_num_list = (index_float.sum(0).data.cpu() + 1)
+
+        beta = args.beta
+
+        effect_num = 1.0 - np.power(beta, cls_num_list)
+        per_cls_weights = (1.0 - beta) / np.array(effect_num)
+        per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
+        per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
+
+        return per_cls_weights
+
+    def obj_margins(self, rm_obj_dists, labels, index_float, max_m):
+
+        obj_dists_ = F.softmax(rm_obj_dists, dim=1)
+        obj_neg_labels = 1.0 - index_float
+        obj_neg_dists = obj_dists_ * obj_neg_labels
+
+        min_pos_prob = obj_dists_[:, labels.data.cpu().numpy()[0]]
+        max_neg_prob = obj_neg_dists.max(1)[0]
+
+        # estimate the margin between dists and gt labels
+        batch_m = torch.max(
+            min_pos_prob - max_neg_prob,
+            torch.zeros_like(max_neg_prob))[:,None]
+
+        mask_fg = (batch_m > 0).float()
+        batch_fg = torch.exp(-batch_m - max_m * self.gamma) * mask_fg
+
+        batch_m = torch.max(
+            max_neg_prob - min_pos_prob,
+            torch.zeros_like(max_neg_prob))[:,None]
+
+        mask_ng = (batch_m > 0).float()
+        batch_ng = torch.exp(-batch_m - max_m) * mask_ng
+        batch_m = batch_ng + batch_fg
+
+        return batch_m.data
+
+    def forward(self, x, target):
+        index = torch.zeros_like(x, dtype=torch.uint8)
+        index.scatter_(1, target.data.view(-1, 1), 1)
+
+        index_float = index.type(torch.cuda.FloatTensor)
+        batch_m = torch.matmul(self.m_list[None, :], index_float.transpose(0,1))
+        batch_m = batch_m.view((-1, 1))
+
+        max_m = self.max_m - batch_m
+        batch_m = self.obj_margins(x, target, index_float, max_m)
+
+        x_m = x - batch_m
+
+        output = torch.where(index, x_m, x)
+        return F.cross_entropy(self.s*output, target, weight=self.weight)
