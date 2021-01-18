@@ -90,7 +90,7 @@ def main():
 
     args.store_name = '_'.join([args.dataset, args.arch, args.loss_type, args.train_rule,
                                 args.imb_type, str(args.imb_factor), args.exp_str])
-    if args.loss_type == 'HMM':
+    if args.loss_type == 'HMM' or args.loss_type == 'HMM-LDAM':
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
         args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
@@ -130,7 +130,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # create model
     print("=> creating model '{}'".format(args.arch))
     num_classes = 200 if args.dataset == 'tiny' else 10
-    use_norm = True if args.loss_type in ['LDAM', 'HMM'] else False
+    use_norm = True if args.loss_type in ['LDAM', 'HMM', 'HMM-LDAM'] else False
     model = models.__dict__[args.arch](num_classes=num_classes, use_norm=use_norm)
     if args.gpu is not None:
         torch.cuda.set_device(args.gpu)
@@ -268,7 +268,13 @@ def main_worker(gpu, ngpus_per_node, args):
                                 max_m=args.max_m,
                                 s=args.scale,
                                 weight=per_cls_weights,
-                                gamma=args.gamma).cuda(args.gpu)
+                                gamma=args.gamma, ldam=False).cuda(args.gpu)
+        elif args.loss_type == 'HMM-LDAM':
+            criterion = HMMLoss(cls_num_list=cls_num_list,
+                                max_m=args.max_m,
+                                s=args.scale,
+                                weight=per_cls_weights,
+                                gamma=args.gamma, ldam=True).cuda(args.gpu)
         else:
             warnings.warn('Loss type is not listed')
             #return

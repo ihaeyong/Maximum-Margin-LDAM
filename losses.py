@@ -47,7 +47,7 @@ class LDAMLoss(nn.Module):
 
 class HMMLoss(nn.Module):
 
-    def __init__(self, cls_num_list, max_m=0.5, weight=None, s=30, gamma=1.1):
+    def __init__(self, cls_num_list, max_m=0.5, weight=None, s=30, gamma=1.1, ldam=False):
         super(HMMLoss, self).__init__()
         m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
         m_list = m_list * (0.5 / np.max(m_list))
@@ -58,6 +58,7 @@ class HMMLoss(nn.Module):
         self.weight = weight
         self.max_m = max_m
         self.gamma = gamma
+        self.ldam = ldam
 
     def weight(self, freq_bias, target, args):
 
@@ -112,7 +113,11 @@ class HMMLoss(nn.Module):
         batch_m = batch_m.view((-1, 1))
 
         # 1.0 - [0.5] => [0.0 ~ 0.5]
-        max_m = self.max_m - batch_m
+        if self.ldam :
+            max_m = self.max_m - batch_m
+        else:
+            max_m = self.max_m
+
         with torch.no_grad():
             batch_hmm = self.obj_margins(x, target, index_float, max_m)
 

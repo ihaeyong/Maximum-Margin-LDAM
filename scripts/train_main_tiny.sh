@@ -34,12 +34,26 @@ elif [ $1 == 'hmm' ]; then
            --dataset tiny \
            --gpu 0 --imb_type exp \
            --imb_factor 0.01 \
-           --loss_type HMM \
-           --train_rule None \
+           --loss_type  HMM \
+           --train_rule DRW \
            --epochs 120 \
            --scale 10.0 \
            --max_m 2.7 \
-           --gamma 1.5 \
+           --gamma 1.2 \
+           --seed 1 \
+           --exp_str only
+
+elif [ $1 == 'hmm-ldam' ]; then
+    python tiny_imagenet_train.py \
+           --dataset tiny \
+           --gpu 0 --imb_type exp \
+           --imb_factor 0.01 \
+           --loss_type  HMM-LDAM \
+           --train_rule DRW \
+           --epochs 120 \
+           --scale 10.0 \
+           --max_m 2.7 \
+           --gamma 1.1 \
            --seed 1 \
            --exp_str logits
 fi
