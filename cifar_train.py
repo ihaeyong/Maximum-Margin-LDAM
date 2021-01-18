@@ -21,7 +21,7 @@ from tensorboardX import SummaryWriter
 from sklearn.metrics import confusion_matrix
 from utils import *
 from imbalance_cifar import IMBALANCECIFAR10, IMBALANCECIFAR100
-from losses import LDAMLoss, FocalLoss
+from losses import LDAMLoss, FocalLoss, HMMLoss
 
 from scipy.stats import entropy, skew
 
@@ -90,21 +90,15 @@ def main():
 
     args.store_name = '_'.join([args.dataset, args.arch, args.loss_type, args.train_rule,
                                 args.imb_type, str(args.imb_factor), args.exp_str])
-    if args.loss_type == 'Unbiased':
-        args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
-        args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
-        args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
-    if args.loss_type == 'Unbiased-ldam':
+
+    if args.loss_type == 'HMM' or args.loss_type == 'HMM-LDAM':
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
         args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
 
-    if args.loss_type == 'Unbiased-batch':
-        #args.store_name = '_'.join([args.store_name,'skew_th',str(args.skew_th)])
-        #args.store_name = '_'.join([args.store_name,'ent_sc',str(args.ent_sc)])
+    elif args.loss_type == 'LDAM':
         args.store_name = '_'.join([args.store_name,'scale',str(args.scale)])
         args.store_name = '_'.join([args.store_name,'max_m',str(args.max_m)])
-        args.store_name = '_'.join([args.store_name,'gamma',str(args.gamma)])
 
     args.store_name = '_'.join([args.store_name,'seed',str(args.seed)])
 
@@ -137,7 +131,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # create model
     print("=> creating model '{}'".format(args.arch))
     num_classes = 100 if args.dataset == 'cifar100' else 10
-    use_norm = True if args.loss_type in ['LDAM', 'Unbiased','Unbiased-ldam'] else False
+    use_norm = True if args.loss_type in ['LDAM', 'HMM','HMM-LDAM'] else False
     model = models.__dict__[args.arch](num_classes=num_classes, use_norm=use_norm)
     if args.gpu is not None:
         torch.cuda.set_device(args.gpu)
@@ -238,36 +232,6 @@ def main_worker(gpu, ngpus_per_node, args):
             per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
             per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
             per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
-
-        elif args.train_rule == 'Unbiased':
-            train_sampler = None
-            idx = epoch // 160
-            betas = [0, 0]
-            effective_num = 1.0 - np.power(betas[idx], cls_num_list)
-            per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
-            per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
-            per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
-
-            args.beta = betas[idx]
-
-        elif args.train_rule == 'Unbiased-ldam':
-            train_sampler = None
-            idx = epoch // 160
-            betas = [0, 0.9999]
-            effective_num = 1.0 - np.power(betas[idx], cls_num_list)
-            per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
-            per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
-            per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
-
-            args.beta = betas[idx]
-
-        elif args.train_rule == 'Unbiased-batch':
-            train_sampler = None
-            per_cls_weights = None
-            idx = epoch // 160
-            betas = [0, 0.9999]
-
-            args.beta = betas[idx]
         else:
             warnings.warn('Sample rule is not listed')
 
@@ -278,19 +242,27 @@ def main_worker(gpu, ngpus_per_node, args):
                                  weight=per_cls_weights).cuda(args.gpu)
         elif args.loss_type == 'Focal':
             criterion = FocalLoss(weight=per_cls_weights, gamma=1).cuda(args.gpu)
-        elif args.loss_type == 'Unbiased' or args.loss_type == 'Unbiased-ldam':
-            criterion = LDAMLoss(cls_num_list=cls_num_list, max_m=0.5, s=30,
-                                 weight=per_cls_weights).cuda(args.gpu)
+        elif args.loss_type == 'HMM':
+            criterion = HMMLoss(cls_num_list=cls_num_list,
+                                max_m=args.max_m,
+                                s=args.scale,
+                                weight=per_cls_weights,
+                                gamma=args.gamma, ldam=False).cuda(args.gpu)
+        elif args.loss_type == 'HMM-LDAM':
+            criterion = HMMLoss(cls_num_list=cls_num_list,
+                                max_m=args.max_m,
+                                s=args.scale,
+                                weight=per_cls_weights,
+                                gamma=args.gamma, ldam=True).cuda(args.gpu)
         else:
-            criterion = None
             warnings.warn('Loss type is not listed')
             #return
 
         # train for one epoch
-        train(train_loader, model, per_cls_weights, criterion, optimizer, epoch, args, log_training, tf_writer)
+        train(train_loader, model, criterion, optimizer, epoch, args, log_training, tf_writer)
 
         # evaluate on validation set
-        acc1 = validate(val_loader, model, per_cls_weights, criterion, epoch, args, log_testing, tf_writer)
+        acc1 = validate(val_loader, model, criterion, epoch, args, log_testing, tf_writer)
 
         # remember best acc@1 and save checkpoint
         is_best = acc1 > best_acc1
@@ -311,100 +283,7 @@ def main_worker(gpu, ngpus_per_node, args):
         }, is_best)
 
 
-def obj_margins(rm_obj_dists, labels, index_float, max_m, gamma=10.0):
-
-    obj_dists_ = F.softmax(rm_obj_dists, dim=1)
-    obj_neg_labels = 1.0 - index_float
-    obj_neg_dists = obj_dists_ * obj_neg_labels
-
-    min_pos_prob = obj_dists_[:, labels.data.cpu().numpy()[0]]
-    max_neg_prob = obj_neg_dists.max(1)[0]
-
-    # estimate the margin between dists and gt labels
-    batch_m = torch.max(
-        min_pos_prob - max_neg_prob,
-        torch.zeros_like(max_neg_prob))[:,None]
-
-    m_type = 'minus'
-    mask_fg = (batch_m > 0).float()
-    if m_type is 'minus':
-        batch_fg = torch.exp(-batch_m - max_m * gamma) * mask_fg
-    elif m_type is 'prod':
-        batch_fg = torch.exp(-batch_m - max_m * gamma) * mask_fg
-
-    batch_m = torch.max(
-        max_neg_prob - min_pos_prob,
-        torch.zeros_like(max_neg_prob))[:,None]
-
-    mask_ng = (batch_m > 0).float()
-    if m_type is 'minus':
-        batch_ng = torch.exp(-batch_m - max_m) * mask_ng
-    elif m_type is 'prod':
-        batch_ng = torch.exp(-batch_m * max_m) * mask_ng
-
-    batch_m = batch_ng + batch_fg
-
-    return batch_m.data
-
-def weight(freq_bias, target, args):
-
-    index = torch.zeros_like(freq_bias, dtype=torch.uint8)
-    index.scatter_(1, target.data.view(-1, 1), 1)
-    index_float = index.type(torch.cuda.FloatTensor)
-
-    # plus 1 affects top-1 acc.
-    cls_num_list = (index_float.sum(0).data.cpu() + 1)
-
-    beta = args.beta
-
-    effect_num = 1.0 - np.power(beta, cls_num_list)
-    per_cls_weights = (1.0 - beta) / np.array(effect_num)
-    per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(cls_num_list)
-    per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
-
-    return per_cls_weights
-
-
-def ldam_loss(x, target, cls_num_list, per_cls_weight, scale=30 ,max_m=0.5,
-              gamma=10.0, margin=False):
-
-    index = torch.zeros_like(x, dtype=torch.uint8)
-    index.scatter_(1, target.data.view(-1, 1), 1)
-    index_float = index.type(torch.cuda.FloatTensor)
-
-    if margin :
-        m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
-        # [0.11, 0.13, 0.15, 0.17, 0.19, 0.22, 0.25, 0.29, 0.33, 0.37]
-        m_list = m_list * (0.5 / np.max(m_list))
-        m_list = torch.cuda.FloatTensor(m_list)
-        # [0.15, 0.17, 0.20, 0.23, 0.26, 0.29, 0.340, 0.38, 0.44, 0.50]
-
-        batch_m = torch.matmul(m_list[None, :], index_float.transpose(0,1))
-        batch_m = batch_m.view((-1, 1))
-
-        if False:
-            max_m = max_m / batch_m
-        else:
-            max_m = max_m - batch_m
-
-        batch_m = obj_margins(x, target, index_float, max_m, gamma)
-        x_m = x - batch_m
-    else:
-        m_list = 1.0 / np.sqrt(np.sqrt(cls_num_list))
-        # cifar10_0.01:[0.11, 0.13, 0.15, 0.17, 0.19, 0.22, 0.25, 0.29, 0.33, 0.37]
-        # cifar100_0.1:[]
-        m_list = m_list * (0.5 / np.max(m_list))
-        m_list = torch.cuda.FloatTensor(m_list)
-        # [0.15, 0.17, 0.20, 0.23, 0.26, 0.29, 0.340, 0.38, 0.44, 0.50]
-
-        batch_m = torch.matmul(m_list[None, :], index_float.transpose(0,1))
-        batch_m = batch_m.view((-1, 1))
-        x_m = x - batch_m
-
-    output = torch.where(index, x_m, x)
-    return F.cross_entropy(scale*output, target, weight=per_cls_weight)
-
-def train(train_loader, model, per_cls_weights, criterion, optimizer, epoch, args, log, tf_writer):
+def train(train_loader, model, criterion, optimizer, epoch, args, log, tf_writer):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
@@ -425,37 +304,7 @@ def train(train_loader, model, per_cls_weights, criterion, optimizer, epoch, arg
 
         # compute output
         output = model(input)
-        if args.loss_type == 'Unbiased':
-            loss = ldam_loss(output,
-                             target,
-                             args.cls_num_list,
-                             per_cls_weights,
-                             scale=args.scale,
-                             max_m=args.max_m,
-                             gamma=args.gamma,
-                             margin=True)
-        elif args.loss_type == 'Unbiased-ldam':
-            loss = ldam_loss(output,
-                             target,
-                             args.cls_num_list,
-                             per_cls_weights,
-                             scale=args.scale,
-                             max_m=args.max_m,
-                             gamma=args.gamma,
-                             margin=True)
-
-        elif args.loss_type == 'Unbiased-batch':
-            per_cls_weights = weight(output, target, args)
-            loss = ldam_loss(output,
-                             target,
-                             args.cls_num_list,
-                             per_cls_weights,
-                             scale=args.scale,
-                             max_m=args.max_m,
-                             gamma=args.gamma,
-                             margin=True)
-        else:
-            loss = criterion(output, target)
+        loss = criterion(output, target)
 
         # measure accuracy and record loss
         acc1, acc5 = accuracy(output, target, topk=(1, 5))
@@ -490,7 +339,7 @@ def train(train_loader, model, per_cls_weights, criterion, optimizer, epoch, arg
     tf_writer.add_scalar('acc/train_top5', top5.avg, epoch)
     tf_writer.add_scalar('lr', optimizer.param_groups[-1]['lr'], epoch)
 
-def validate(val_loader, model, per_cls_weights, criterion, epoch, args, log=None, tf_writer=None, flag='val'):
+def validate(val_loader, model, criterion, epoch, args, log=None, tf_writer=None, flag='val'):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
@@ -509,39 +358,7 @@ def validate(val_loader, model, per_cls_weights, criterion, epoch, args, log=Non
 
             # compute output
             output = model(input)
-            if args.loss_type == 'Unbiased':
-                loss = ldam_loss(output,
-                                 target,
-                                 args.cls_num_list,
-                                 per_cls_weights,
-                                 scale=args.scale,
-                                 max_m=args.max_m,
-                                 gamma=args.gamma,
-                                 margin=True)
-
-            elif args.loss_type == 'Unbiased-ldam':
-
-                loss = ldam_loss(output,
-                                 target,
-                                 args.cls_num_list,
-                                 per_cls_weights,
-                                 scale=args.scale,
-                                 max_m=args.max_m,
-                                 gamma=args.gamma,
-                                 margin=True)
-
-            elif args.loss_type == 'Unbiased-batch':
-                per_cls_weights = weight(output, target, args)
-                loss = ldam_loss(output,
-                                 target,
-                                 args.cls_num_list,
-                                 per_cls_weights,
-                                 scale=args.scale,
-                                 max_m=args.max_m,
-                                 gamma=args.gamma,
-                                 margin=True)
-            else:
-                loss = criterion(output, target)
+            loss = criterion(output, target)
 
             # measure accuracy and record loss
             acc1, acc5 = accuracy(output, target, topk=(1, 5))

@@ -19,51 +19,36 @@ elif [ $1 == 'ldam' ]; then
            --gpu 0 --imb_type exp \
            --imb_factor 0.01 \
            --loss_type LDAM \
-           --train_rule DRW
+           --train_rule DRW \
+           --seed 1 \
+           --exp_str logits
 
-elif [ $1 == 'unbiased' ]; then
+elif [ $1 == 'hmm' ]; then
     python cifar_train.py \
            --dataset cifar10 \
            --gpu 0 --imb_type exp \
-           --imb_factor 0.01 \
-           --loss_type Unbiased \
-           --train_rule Unbiased \
+           --imb_factor 0.1 \
+           --loss_type HMM  \
+           --train_rule DRW \
            --epochs 200 \
            --scale 10.0 \
-           --max_m 0.8 \
+           --max_m 2.7 \
            --gamma 1.0 \
            --seed 1 \
-           --exp_str const_margin
+           --exp_str logits
 
-elif [ $1 == 'unbiased-ldam' ]; then
+elif [ $1 == 'hmm-ldam' ]; then
     python cifar_train.py \
            --dataset cifar100 \
            --gpu 0 --imb_type step \
            --imb_factor 0.1 \
-           --loss_type Unbiased-ldam \
-           --train_rule Unbiased-ldam \
+           --loss_type HMM-LDAM \
+           --train_rule DRW \
            --epochs 200 \
-           --skew_th 2.9 \
-           --ent_sc 1.0 \
-           --scale 18.0 \
-           --max_m 2.6 \
-           --gamma 1.5 \
+           --scale 17.0 \
+           --max_m 0.5 \
+           --gamma 1.0 \
            --seed 1 \
-           --exp_str minus
-
-elif [ $1 == 'unbiased-batch' ]; then
-    python cifar_train.py \
-           --dataset cifar100 \
-           --gpu 0 --imb_type exp \
-           --imb_factor 0.1 \
-           --loss_type Unbiased-batch \
-           --train_rule Unbiased-batch \
-           --epochs 200 \
-           --skew_th 2.9 \
-           --ent_sc 1.0 \
-           --scale 10.0 \
-           --max_m 0.7 \
-           --gamma 0.5 \
-           --exp_str 0
+           --exp_str logits
 
 fi
