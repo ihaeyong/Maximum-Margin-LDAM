@@ -25,29 +25,29 @@ elif [ $1 == 'ldam' ]; then
 
 elif [ $1 == 'hmm' ]; then
     python cifar_train.py \
-           --dataset cifar10 \
+           --dataset cifar100 \
            --gpu 0 --imb_type exp \
-           --imb_factor 0.1 \
+           --imb_factor 0.01 \
            --loss_type HMM  \
            --train_rule DRW \
            --epochs 200 \
-           --scale 10.0 \
-           --max_m 2.7 \
-           --gamma 1.0 \
-           --seed 1 \
+           --scale 17.0 \
+           --max_m 1.8 \
+           --gamma 1.7 \
+           --seed 1\
            --exp_str logits
 
 elif [ $1 == 'hmm-ldam' ]; then
     python cifar_train.py \
            --dataset cifar100 \
-           --gpu 0 --imb_type step \
+           --gpu 0 --imb_type exp \
            --imb_factor 0.1 \
            --loss_type HMM-LDAM \
            --train_rule DRW \
            --epochs 200 \
            --scale 17.0 \
-           --max_m 0.5 \
-           --gamma 1.0 \
+           --max_m 1.9 \
+           --gamma 1.5 \
            --seed 1 \
            --exp_str logits
 
