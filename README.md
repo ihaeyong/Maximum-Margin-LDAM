@@ -1,8 +1,11 @@
-## Learning Imbalanced Datasets with Label-Distribution-Aware Margin Loss 
-Kaidi Cao, Colin Wei, Adrien Gaidon, Nikos Arechiga, Tengyu Ma
+## Learning imbalanced datasets with maximum margin loss
+Kang, Haeyong and Vu, Thang and Yoo, Chang D
 _________________
 
-This is the official implementation of LDAM-DRW in the paper [Learning Imbalanced Datasets with Label-Distribution-Aware Margin Loss](https://arxiv.org/pdf/1906.07413.pdf) in PyTorch.
+This is the official implementation of LDAM-DRW in the paper [Learning imbalanced datasets with maximum margin loss](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9506389) in PyTorch.
+
+
+Our baseline code follows the official implementation of LDAM-DRW in the paper [Learning Imbalanced Datasets with Label-Distribution-Aware Margin Loss](https://arxiv.org/pdf/1906.07413.pdf) in PyTorch.
 
 ### Dependency
 
@@ -34,9 +37,28 @@ python cifar_train.py --gpu 0 --imb_type exp --imb_factor 0.01 --loss_type LDAM 
 ```
 
 
+- To train the LDAM-MM Loss along with DRW training on long-tailed imbalance with ratio of 100
+
+```bash
+python cifar_train.py --dataset cifar100 --gpu 0 --imb_type exp --imb_factor 0.01 --loss_type HMM-LDAM \
+           --train_rule DRW --epochs 200 --scale 17.0 --max_m 1.9 --gamma 1.5 --seed 1 --exp_str logits
+```
+
+
 ### Reference
 
 If you find our paper and repo useful, please cite as
+```
+@inproceedings{kang2021learning,
+  title={Learning imbalanced datasets with maximum margin loss},
+  author={Kang, Haeyong and Vu, Thang and Yoo, Chang D},
+  booktitle={2021 IEEE International Conference on Image Processing (ICIP)},
+  pages={1269--1273},
+  year={2021},
+  organization={IEEE}
+}
+```
+Our baseline paper follow as :
 
 ```
 @inproceedings{cao2019learning,
