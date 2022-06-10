@@ -80,11 +80,9 @@ class HMMLoss(nn.Module):
 
     def obj_margins(self, rm_obj_dists, labels, index_float, max_m):
 
-        # obj_dists_ = F.softmax(rm_obj_dists, dim=1)
         obj_neg_labels = 1.0 - index_float
         obj_neg_dists = rm_obj_dists * obj_neg_labels
 
-        # ======= check it again ========= 
         min_pos_prob = rm_obj_dists[:, labels.data.cpu().numpy()[0]].data
         max_neg_prob = obj_neg_dists.max(1)[0].data
 

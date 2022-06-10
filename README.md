@@ -2,7 +2,7 @@
 Kang, Haeyong and Vu, Thang and Yoo, Chang D
 _________________
 
-This is the official implementation of LDAM-DRW in the paper [Learning imbalanced datasets with maximum margin loss](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9506389) in PyTorch.
+This is the official implementation of MM-LDAM-DRW in the paper [Learning Imbalanced Datasets with Maximum Margin Loss](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9506389) in PyTorch.
 
 
 Our baseline code follows the official implementation of LDAM-DRW in the paper [Learning Imbalanced Datasets with Label-Distribution-Aware Margin Loss](https://arxiv.org/pdf/1906.07413.pdf) in PyTorch.
@@ -37,11 +37,11 @@ python cifar_train.py --gpu 0 --imb_type exp --imb_factor 0.01 --loss_type LDAM 
 ```
 
 
-- To train the LDAM-MM Loss along with DRW training on long-tailed imbalance with ratio of 100
+- To train the Maximum Margin Loss along with DRW training on long-tailed imbalance with ratio of 100 (hyper-params of scale, max_m, and gamma should be set)
 
 ```bash
-python cifar_train.py --dataset cifar100 --gpu 0 --imb_type exp --imb_factor 0.01 --loss_type HMM-LDAM \
-           --train_rule DRW --epochs 200 --scale 17.0 --max_m 1.9 --gamma 1.5 --seed 1 --exp_str logits
+python cifar_train.py --dataset cifar100 --gpu 0 --imb_type exp --imb_factor 0.01 --loss_type HMM \
+           --train_rule DRW --epochs 200 --scale 19.0 --max_m 1.29 --gamma 1.528 --seed 1 --exp_str logits
 ```
 
 
