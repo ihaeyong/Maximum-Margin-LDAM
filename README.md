@@ -11,7 +11,7 @@ Our baseline code follows the official implementation of LDAM-DRW in the paper [
 
 The code is built with following libraries:
 
-- [PyTorch](https://pytorch.org/) 1.2
+- [PyTorch](https://pytorch.org/) 1.11.0
 - [TensorboardX](https://github.com/lanpa/tensorboardX)
 - [scikit-learn](https://scikit-learn.org/stable/)
 
