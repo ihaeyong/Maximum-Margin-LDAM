@@ -1,4 +1,4 @@
-## Learning imbalanced datasets with maximum margin loss
+## [Learning imbalanced datasets with maximum margin loss](https://arxiv.org/abs/2206.05380)
 Kang, Haeyong and Vu, Thang and Yoo, Chang D
 _________________
 
