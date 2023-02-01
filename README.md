@@ -37,7 +37,7 @@ python cifar_train.py --gpu 0 --imb_type exp --imb_factor 0.01 --loss_type LDAM 
 ```
 
 
-- To train the Maximum Margin Loss along with DRW training on long-tailed imbalance with ratio of 100 (hyper-params of scale, max_m, and gamma should be set)
+- To train the **Maximum Margin Loss along with DRW training** on long-tailed imbalance with ratio of 100 (hyper-params of scale, max_m, and gamma should be set)
 
 ```bash
 python cifar_train.py --dataset cifar100 --gpu 0 --imb_type exp --imb_factor 0.01 --loss_type HMM \
