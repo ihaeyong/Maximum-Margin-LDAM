@@ -2,7 +2,7 @@
 Kang, Haeyong and Vu, Thang and Yoo, Chang D
 _________________
 
-This is the official implementation of MM-LDAM-DRW in the paper [Learning Imbalanced Datasets with Maximum Margin Loss](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9506389) in PyTorch.
+This is the official implementation of MM-LDAM-DRW in the paper [Learning Imbalanced Datasets with Maximum Margin Loss](https://arxiv.org/abs/2206.05380) in PyTorch.
 
 
 Our baseline code follows the official implementation of LDAM-DRW in the paper [Learning Imbalanced Datasets with Label-Distribution-Aware Margin Loss](https://arxiv.org/pdf/1906.07413.pdf) in PyTorch.
